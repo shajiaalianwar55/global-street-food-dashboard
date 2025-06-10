@@ -5,3 +5,4 @@ statsmodels.stats.api
 matplotlib.pyplot
 plotly.express
 streamlit   
+plotly.graph_objects

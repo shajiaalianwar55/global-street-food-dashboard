@@ -3,6 +3,7 @@ import pandas as pd          # data tables
 import numpy as np           # easy numeric operations
 import seaborn as sns
 import statsmodels.stats.api as sms  # for confidence intervals
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import plotly.express as px  # interactive charts
 import streamlit as st       # turns this script into a web app
@@ -28,50 +29,6 @@ else:
 
 # Clean up NULLS
 df.dropna(inplace=True)
-#-----------------------CONFIDENCE INTERVALS-----------------------#
-def compute_ci(data, confidence=0.95):
-    if len(data) > 1:
-        mean = np.mean(data)
-        ci = sms.DescrStatsW(data).tconfint_mean(alpha=1-confidence)
-        return mean, ci
-    return np.nan, (np.nan, np.nan)
-
-st.subheader("PVS Improvement Confidence Intervals by Year")
-
-# Generate CI Data
-years = sorted(df['report_year'].unique())
-ci_results = []
-
-for year in years:
-    scores = df[df['report_year'] == year]['PVS_Improvement']
-    mean, ci = compute_ci(scores)
-    ci_results.append({
-        'Year': year,
-        'Mean': mean,
-        'CI_Lower': ci[0],
-        'CI_Upper': ci[1],
-        'Sample_Size': len(scores)})
-
-ci_df = pd.DataFrame(ci_results)
-
-# Plot
-fig_ci, ax = plt.subplots(figsize=(10, 6))
-ax.errorbar(ci_df['Year'], ci_df['Mean'],
-            yerr=[ci_df['Mean'] - ci_df['CI_Lower'], ci_df['CI_Upper'] - ci_df['Mean']],
-            fmt='o-', capsize=5, color='darkgreen')
-
-# Annotate n values
-for i, row in ci_df.iterrows():
-    ax.text(row['Year'], row['CI_Upper'] + 2, f'n={int(row["Sample_Size"])}', ha='center')
-
-ax.set_title('PVS Improvement Mean and 95% CI by Year')
-ax.set_xlabel('Year')
-ax.set_ylabel('PVS Improvement (%)')
-ax.set_ylim(0, 100)
-ax.grid(True)
-
-st.pyplot(fig_ci)
-
 
 #------------------------STREAMLIT PAGE--------------------#
 st.set_page_config(page_title="Global Street Food Dashboard", layout="wide")
@@ -105,6 +62,72 @@ fig_city = px.bar(x=avg_price_by_city.index,
                   text=avg_price_by_city.values.round(2))
 fig_city.update_traces(textposition="outside")
 st.plotly_chart(fig_city, use_container_width=True)
+
+#-----------------------CONFIDENCE INTERVALS-----------------------#
+def compute_ci(data, confidence=0.95):
+    if len(data) > 1:
+        mean = np.mean(data)
+        ci = sms.DescrStatsW(data).tconfint_mean(alpha=1-confidence)
+        return mean, ci
+    return np.nan, (np.nan, np.nan)
+
+ci_results = []
+for country in sorted(df["Country"].unique()):
+    prices = df[df["Country"] == country]["TypicalPrice(USD)"]
+    mean, ci = compute_ci(prices)
+    ci_results.append({
+        "Country": country,
+        "Mean": mean,
+        "CI_Lower": ci[0],
+        "CI_Upper": ci[1],
+        "Sample_Size": len(prices)
+    })
+
+ci_df = pd.DataFrame(ci_results)
+
+st.subheader("95% Confidence Intervals of Price by Country")
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(
+    x=ci_df['Country'],
+    y=ci_df['Mean'],
+    mode='lines+markers',
+    error_y=dict(
+        type='data',
+        symmetric=False,
+        array=ci_df['CI_Upper'] - ci_df['Mean'],       # upper error bar
+        arrayminus=ci_df['Mean'] - ci_df['CI_Lower'],  # lower error bar
+        thickness=1.5,
+        width=3
+    ),
+    marker=dict(color='#2a90b5', size=8),
+    hovertemplate=(
+      "<b>%{x}</b><br>"
+      "Mean: %{y:.2f} USD<br>"
+      "CI: [%{customdata[0]:.2f}, %{customdata[1]:.2f}]<br>"
+      "n = %{customdata[2]}<extra></extra>"
+    ),
+    customdata=np.stack([ci_df['CI_Lower'], ci_df['CI_Upper'], ci_df['Sample_Size']], axis=-1)
+))
+
+fig.update_layout(
+    title="95% Confidence Intervals of Price by Country",
+    xaxis=dict(
+        title="Country",
+        tickangle=45,
+        type="category",
+        rangeslider=dict(visible=True)    # ← this turns on the horizontal slider
+    ),
+    yaxis=dict(
+        title="Typical Price (USD)",
+        range=[0, ci_df['CI_Upper'].max() * 1.1]
+    ),
+    margin=dict(l=40, r=20, t=60, b=120),
+    height=600
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 #---------------------- TWO-COLUMN SECTION-----------------------#
 left_col, right_col = st.columns(2)
