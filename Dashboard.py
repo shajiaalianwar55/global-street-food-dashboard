@@ -1,6 +1,9 @@
 #  GLOBAL STREET-FOOD DASHBOARD
 import pandas as pd          # data tables
 import numpy as np           # easy numeric operations
+import seaborn as sns
+import statsmodels.stats.api as sms  # for confidence intervals
+import matplotlib.pyplot as plt
 import plotly.express as px  # interactive charts
 import streamlit as st       # turns this script into a web app
 
@@ -25,6 +28,50 @@ else:
 
 # Clean up NULLS
 df.dropna(inplace=True)
+#-----------------------CONFIDENCE INTERVALS-----------------------#
+def compute_ci(data, confidence=0.95):
+    if len(data) > 1:
+        mean = np.mean(data)
+        ci = sms.DescrStatsW(data).tconfint_mean(alpha=1-confidence)
+        return mean, ci
+    return np.nan, (np.nan, np.nan)
+
+st.subheader("PVS Improvement Confidence Intervals by Year")
+
+# Generate CI Data
+years = sorted(df['report_year'].unique())
+ci_results = []
+
+for year in years:
+    scores = df[df['report_year'] == year]['PVS_Improvement']
+    mean, ci = compute_ci(scores)
+    ci_results.append({
+        'Year': year,
+        'Mean': mean,
+        'CI_Lower': ci[0],
+        'CI_Upper': ci[1],
+        'Sample_Size': len(scores)})
+
+ci_df = pd.DataFrame(ci_results)
+
+# Plot
+fig_ci, ax = plt.subplots(figsize=(10, 6))
+ax.errorbar(ci_df['Year'], ci_df['Mean'],
+            yerr=[ci_df['Mean'] - ci_df['CI_Lower'], ci_df['CI_Upper'] - ci_df['Mean']],
+            fmt='o-', capsize=5, color='darkgreen')
+
+# Annotate n values
+for i, row in ci_df.iterrows():
+    ax.text(row['Year'], row['CI_Upper'] + 2, f'n={int(row["Sample_Size"])}', ha='center')
+
+ax.set_title('PVS Improvement Mean and 95% CI by Year')
+ax.set_xlabel('Year')
+ax.set_ylabel('PVS Improvement (%)')
+ax.set_ylim(0, 100)
+ax.grid(True)
+
+st.pyplot(fig_ci)
+
 
 #------------------------STREAMLIT PAGE--------------------#
 st.set_page_config(page_title="Global Street Food Dashboard", layout="wide")
@@ -137,3 +184,21 @@ fig_map = px.choropleth(avg_price_country,
 fig_map.update_geos(showcoastlines=False, showcountries=True)
 st.plotly_chart(fig_map, use_container_width=True)
 st.caption("Data source: Kaggle Global Street-Food Dataset · Dashboard built with Streamlit & Plotly")
+
+#-------------------------------Seaborn graph, countplot-------------------------------#
+st.subheader("Number of dishes per Country in the dataset")
+# Count dishes per country (all)
+dish_counts = df['Country'].value_counts()
+
+# Create the plot
+fig, ax = plt.subplots(figsize=(14, 8))  # You can adjust size if needed
+sns.barplot(x=dish_counts.index, y=dish_counts.values, ax=ax, palette="viridis")
+
+# Customize the plot
+ax.set_xlabel("Country")
+ax.set_ylabel("Number of Dishes")
+ax.set_title("Number of Dishes Available in Each Country")
+plt.xticks(rotation=45, ha='right')
+
+# Show the plot in Streamlit
+st.pyplot(fig)
