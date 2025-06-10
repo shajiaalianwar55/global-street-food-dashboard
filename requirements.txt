@@ -1,4 +1,7 @@
-streamlit
-pandas
-numpy
-plotly
+pandas        
+numpy       
+seaborn
+statsmodels.stats.api
+matplotlib.pyplot
+plotly.express
+streamlit   
